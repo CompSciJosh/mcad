@@ -12,8 +12,8 @@
 ### Step 8: Implement User Authentication ###
 #############################################
 import re
-# import nltk # *** could comment-out ***
-# from nltk.corpus import words # *** could comment-out ***
+import nltk # *** could comment-out ***
+from nltk.corpus import words # *** could comment-out ***
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
@@ -31,9 +31,12 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
+"""
+words used
+"""
 # Download English words dataset (only needed once)
-# nltk.download("words") # *** could comment-out ***
-# english_words = set(words.words()) # *** could comment-out ***
+nltk.download("words") # *** could comment-out ***
+english_words = set(words.words()) # *** could comment-out ***
 
 app = FastAPI()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -51,20 +54,67 @@ class UserResponse(BaseModel):
     email: str
     is_active: bool
 
+
 # Function to validate password complexity
 def validate_password(password: str) -> bool:
     """Validates password strength."""
+    print(f"Validating password: {password}")  # Debugging
+
     if len(password) < 16 or len(password) > 64:
+        print("Failed: Length check")
         return False
     if not any(c.islower() for c in password):
+        print("Failed: No lowercase letter")
         return False
     if not any(c.isupper() for c in password):
+        print("Failed: No uppercase letter")
         return False
     if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+        print("Failed: No special character")
         return False
-    # if any(word in password.lower() for word in english_words):  # Check for dictionary words # *** could comment-out ***
-    #     return False # *** could comment-out ***
+
+    # Tokenize password into words and check against English words
+    password_words = [word for word in re.findall(r'\b[a-zA-Z]+\b', password) if len(word) > 1]
+    print(f"Extracted words: {password_words}")  # Debugging
+
+    if any(word.lower() in english_words for word in password_words):
+        print(f"Failed: Contains dictionary words -> {password_words}")
+        return False
+
+    print("Password is valid!")  # Debugging
     return True
+
+####################################
+#### Debugging Password Example ####
+##################################
+# def validate_password(password: str) -> bool:
+#     """Validates password strength."""
+#     print(f"Validating password: {password}")  # Debugging
+#
+#     if len(password) < 16 or len(password) > 64:
+#         print("Failed: Length check")
+#         return False
+#     if not any(c.islower() for c in password):
+#         print("Failed: No lowercase letter")
+#         return False
+#     if not any(c.isupper() for c in password):
+#         print("Failed: No uppercase letter")
+#         return False
+#     if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+#         print("Failed: No special character")
+#         return False
+#
+#     # Tokenize password into whole words and check against dictionary
+#     password_words = re.findall(r'\b[a-zA-Z]+\b', password)  # Extract whole words only
+#     print(f"Extracted words: {password_words}")  # Debugging
+#
+#     if any(word.lower() in english_words for word in password_words):
+#         print(f"Failed: Contains dictionary words -> {password_words}")
+#         return False
+#
+#     print("Password is valid!")  # Debugging
+#     return True
+###################################################
 
 # Function to hash passwords
 def hash_password(password: str) -> str:
