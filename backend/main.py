@@ -12,8 +12,8 @@
 ### Step 8: Implement User Authentication ###
 #############################################
 import re
-import nltk # *** could comment-out ***
-from nltk.corpus import words # *** could comment-out ***
+# import nltk # *** could comment-out ***
+# from nltk.corpus import words # *** could comment-out ***
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
@@ -32,8 +32,8 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # Download English words dataset (only needed once)
-nltk.download("words") # *** could comment-out ***
-english_words = set(words.words()) # *** could comment-out ***
+# nltk.download("words") # *** could comment-out ***
+# english_words = set(words.words()) # *** could comment-out ***
 
 app = FastAPI()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -62,8 +62,8 @@ def validate_password(password: str) -> bool:
         return False
     if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
         return False
-    if any(word in password.lower() for word in english_words):  # Check for dictionary words # *** could comment-out ***
-        return False # *** could comment-out ***
+    # if any(word in password.lower() for word in english_words):  # Check for dictionary words # *** could comment-out ***
+    #     return False # *** could comment-out ***
     return True
 
 # Function to hash passwords
