@@ -12,8 +12,8 @@
 ### Step 8: Implement User Authentication ###
 #############################################
 import re
-import nltk # *** could comment-out ***
-from nltk.corpus import words # *** could comment-out ***
+import nltk
+from nltk.corpus import words
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
@@ -23,6 +23,8 @@ import bcrypt
 import os
 from dotenv import load_dotenv
 from database import get_snowflake_connection
+import numpy as np
+from utils.crater_calculations import compute_camera_altitude, compute_image_dimensions, crater_diameter_meters
 
 # Load environment variables
 load_dotenv()
@@ -31,12 +33,9 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-"""
-words used
-"""
 # Download English words dataset (only needed once)
-nltk.download("words") # *** could comment-out ***
-english_words = set(words.words()) # *** could comment-out ***
+nltk.download("words")
+english_words = set(words.words())
 
 app = FastAPI()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -149,7 +148,7 @@ def register_user(user: UserCreate):
             username_lower = user.username.lower()
 
             # Check if username or email already exists (case-insensitive check)
-            cur.execute("SELECT id FROM users WHERE LOWER(username)=%s OR email=%s", (username_lower, user.email))
+            cur.execute("SELECT id FROM users WHERE LOWER(username)=%s OR email=%sc", (username_lower, user.email))
             if cur.fetchone():
                 raise HTTPException(status_code=400, detail="Username or email already registered")
 
@@ -199,4 +198,42 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
             conn.close()
     raise HTTPException(status_code=500, detail="Database connection failed")
 
+####################################################################################
+############ Calculate Camera Distance From Moon ###################################
+############ Calculate Diameter of Craters Using Their Pixel Size ##################
+####################################################################################
+"""
+Next as of Feb. 23, 2025 - Test the API using:
+uvicorn main:app --reload
+
+Then, send a test request using cURL or Postman:
+curl -X 'POST' 'http://127.0.0.1:8000/compute_crater_size/' \
+-H 'Content-Type: application/json' \
+-d '{"cam_pos": [1890303.161771466, 1971386.8433341454, 2396504.6261527603], "pixel_diameter": 50}'
+
+"""
+
+# Constants
+FOV_X = 0.3490658503988659  # Field of View in radians (X)
+FOV_Y = 0.27580511636453603  # Field of View in radians (Y)
+IMAGE_WIDTH_PX = 2592  # Image width in pixels
+IMAGE_HEIGHT_PX = 2048  # Image height in pixels
+
+class CraterRequest(BaseModel):
+    cam_pos: list[float]  # Camera position in meters
+    pixel_diameter: int  # Crater size in pixels
+
+@app.post("/compute_crater_size/")
+async def compute_crater_size(request: CraterRequest):
+    """API endpoint to compute crater diameter in meters from pixel size."""
+    cam_pos = np.array(request.cam_pos)
+    altitude = compute_camera_altitude(cam_pos)
+    image_width_m, _ = compute_image_dimensions(altitude, FOV_X, FOV_Y)
+    crater_size_m = crater_diameter_meters(request.pixel_diameter, image_width_m, IMAGE_WIDTH_PX)
+
+    return {
+        "camera_altitude_m": altitude,
+        "image_width_m": image_width_m,
+        "crater_diameter_m": crater_size_m
+    }
 
