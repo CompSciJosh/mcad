@@ -25,6 +25,7 @@ from dotenv import load_dotenv
 from database import get_snowflake_connection
 import numpy as np
 from utils.crater_calculations import compute_camera_altitude, compute_image_dimensions, crater_diameter_meters
+from typing import List
 
 # Load environment variables
 load_dotenv()
@@ -220,7 +221,7 @@ IMAGE_WIDTH_PX = 2592  # Image width in pixels
 IMAGE_HEIGHT_PX = 2048  # Image height in pixels
 
 class CraterRequest(BaseModel):
-    cam_pos: list[float]  # Camera position in meters
+    cam_pos: List[float]  # Camera position in meters
     pixel_diameter: int  # Crater size in pixels
 
 @app.post("/compute_crater_size/")
@@ -232,6 +233,9 @@ async def compute_crater_size(request: CraterRequest):
     crater_size_m = crater_diameter_meters(request.pixel_diameter, image_width_m, IMAGE_WIDTH_PX)
 
     return {
+        "message": "Request received!",
+        "cam_pos": request.cam_pos,
+        "pixel_diameter": request.pixel_diameter,
         "camera_altitude_m": altitude,
         "image_width_m": image_width_m,
         "crater_diameter_m": crater_size_m
