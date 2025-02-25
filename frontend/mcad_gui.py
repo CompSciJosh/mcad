@@ -1,6 +1,7 @@
 import sys
 import requests
 from PyQt6.QtWidgets import QApplication, QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout, QMessageBox
+from PyQt6.QtGui import QPixmap
 
 API_URL = "http://127.0.0.1:8000/compute_crater_size/"  # FastAPI endpoint
 
@@ -37,6 +38,16 @@ class CraterGUI(QWidget):
         layout.addWidget(self.pixel_diameter_input)
         layout.addWidget(self.compute_button)
         layout.addWidget(self.result_label)
+
+        # NASA Logo
+        self.nasa_logo = QLabel(self)
+        pixmap = QPixmap("nasa_logo.png")  # Load the image file
+        self.nasa_logo.setPixmap(pixmap)
+        self.nasa_logo.setScaledContents(True)  # Scale the image to fit the label
+        self.nasa_logo.setFixedSize(150, 150)  # Set size (adjust as needed)
+
+        # Add NASA logo to the layout (before other widgets)
+        layout.addWidget(self.nasa_logo)
 
         self.setLayout(layout)
 
@@ -84,3 +95,5 @@ if __name__ == "__main__":
     window = CraterGUI()
     window.show()
     sys.exit(app.exec())
+
+
