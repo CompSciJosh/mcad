@@ -1,14 +1,21 @@
 """
-1. REMEMBER! Run the FastAPI server: uvicorn main:app --reload
-   First, navigate to the backend directory (cd ~/PycharmProjects/mcad/backend)
-2. Open http://127.0.0.1:8000/docs in my browser
-3. Run the PyQt6 GUI script in the Python Console: python mcad_gui.py
-
  Joshua Jackson
  February 19, 2025,
  FastAPI backend entry point
  MCAD Backend Authentication
+ ###########################################
+ ################ Reminders ################
+ ##########################################
+1. REMEMBER! Run the FastAPI server: uvicorn main:app --reload
+   First, navigate to the backend directory (cd ~/PycharmProjects/mcad/backend)
+2. Open http://127.0.0.1:8000/docs in my browser
+3. Run the PyQt6 GUI script in PyCharm
+        Note: To troubleshoot, could also run:
+        cd ~/PycharmProjects/mcad/frontend
+        python mcad_gui.py
 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # # # # # # # # # # # # # # # # # # # # #
  installed dependencies using PyCharm terminal:
  pip install fastapi uvicorn bcrypt pyjwt python-dotenv snowflake-connector-python
  In PyCharm terminal press: Ctrl + C to stop the server
