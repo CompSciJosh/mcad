@@ -1,4 +1,9 @@
 """
+1. REMEMBER! Run the FastAPI server: uvicorn main:app --reload
+   First, navigate to the backend directory (cd ~/PycharmProjects/mcad/backend)
+2. Open http://127.0.0.1:8000/docs in my browser
+3. Run the PyQt6 GUI script in the Python Console: python mcad_gui.py
+
  Joshua Jackson
  February 19, 2025,
  FastAPI backend entry point
