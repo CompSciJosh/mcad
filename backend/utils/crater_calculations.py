@@ -25,3 +25,10 @@ def compute_image_dimensions(altitude, fov_x, fov_y):
 def crater_diameter_meters(pixel_diameter, image_width_m, image_width_px):
     """Calculate crater diameter in meters from pixel size."""
     return pixel_diameter * (image_width_m / image_width_px)
+
+"""
+Note: "def compute_camera_altitude(cam_pos)", 
+"def compute_image_dimensions(altitude, fov_x, fov_y)", 
+and "def crater_diameter_meters(pixel_diameter, image_width_m, image_width_px)" 
+are stored in the Python file "crater_calculations.py" located at ~/PycharmProjects/mcad/backend/utils
+"""
