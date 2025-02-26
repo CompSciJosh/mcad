@@ -85,10 +85,24 @@ class CraterGUI(QWidget):
             # Handle API response
             if response.status_code == 200:
                 result = response.json()
+
+                # Convert meters to miles
+                altitude_m = result['camera_altitude_m']
+                altitude_miles = altitude_m * 0.000621371
+
+                # Convert meters to miles
+                image_width_m = result['image_width_m']
+                image_width_miles = image_width_m * 0.000621371
+
+                # Convert meters to miles
+                crater_diameter_m = result['crater_diameter_m']
+                crater_diameter_miles = crater_diameter_m * 0.000621371
+
+                # Display the calculations in both meters and miles
                 self.result_label.setText(
-                    f"Altitude: {result['camera_altitude_m']:.2f} m\n"
-                    f"Image Width: {result['image_width_m']:.2f} m\n"
-                    f"Crater Diameter: {result['crater_diameter_m']:.2f} m"
+                    f"Altitude: {altitude_m:.2f} m ({altitude_miles:.4f} mi)\n"
+                    f"Image Width: {image_width_m:.2f} m ({image_width_miles:.4f} mi)\n"
+                    f"Crater Diameter: {crater_diameter_m:.2f} m ({crater_diameter_miles:.4f} mi)"
                 )
             else:
                 QMessageBox.critical(self, "Error", f"Failed to compute crater size.\nServer Response: {response.text}")
