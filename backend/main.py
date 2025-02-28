@@ -25,17 +25,19 @@
 #############################################
 import re
 import nltk
-from nltk.corpus import words
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel
-from datetime import datetime, timedelta, UTC  # Ensure UTC is imported
 import jwt
 import bcrypt
 import os
+import numpy as np
+import base64
+from nltk.corpus import words
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+#from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
+from datetime import datetime, timedelta, UTC  # Ensure UTC is imported
 from dotenv import load_dotenv
 from database import get_snowflake_connection
-import numpy as np
 from utils.crater_calculations import compute_camera_altitude, compute_image_dimensions, crater_diameter_meters
 from typing import List
 
@@ -252,4 +254,202 @@ async def compute_crater_size(request: CraterRequest):
         "image_width_m": image_width_m,
         "crater_diameter_m": crater_size_m
     }
+###########################################
+################ Old Version ##############
+###########################################
+# @app.get("/list_png_files/{folder_number}")
+# def list_png_files(folder_number: str):
+#     """
+#     Retrieves a list of PNG files from the specified folder in Snowflake.
+#     """
+#     # Validate folder input
+#     if not folder_number.isdigit() or not (0 <= int(folder_number) <= 275):
+#         raise HTTPException(status_code=400, detail="Invalid folder number. Must be between '000' and '275'.")
+#
+#     folder_number = folder_number.zfill(3)  # Ensure format "000", "001", ..., "275"
+#
+#     conn = get_snowflake_connection()
+#     if conn:
+#         try:
+#             cur = conn.cursor()
+#             query = f"""
+#                 SELECT METADATA$FILENAME
+#                 FROM DIRECTORY(@MCAD.MCAD_DATA.INTERNAL_STAGE_FOR_ORIGINAL_DATA)
+#                 WHERE METADATA$FILENAME LIKE '{folder_number}/%.png'
+#             """
+#             cur.execute(query)
+#             png_files = [row[0].split("/")[-1] for row in cur.fetchall()]
+#             cur.close()
+#
+#             return JSONResponse(content={"png_files": png_files})
+#         except Exception as e:
+#             raise HTTPException(status_code=500, detail=f"Database error: {e}")
+#         finally:
+#             conn.close()
+#     raise HTTPException(status_code=500, detail="Database connection failed")
+
+##############################
+######## New Version #########
+##############################
+
+@app.get("/list_png_files/{folder_number}")
+def list_png_files(folder_number: str):
+    """Fetch PNG filenames from Snowflake based on the folder number."""
+    conn = get_snowflake_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+
+            # Query staged files for the selected folder
+            query = f"""
+            SELECT METADATA$FILENAME 
+            FROM @MCAD/MCAD_DATA/MOON_CRATER_IMAGES 
+            WHERE METADATA$FILENAME LIKE 'Folder {folder_number}/%.png'
+            """
+            cur.execute(query)
+
+            # Extract filenames
+            png_files = [row[0].split("/")[-1] for row in cur.fetchall()]
+            cur.close()
+            return {"png_files": png_files}
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+###########################################################
+####### 1st get_png script (w/o base64 or streaming) ######
+###########################################################
+# @app.get("/get_png/{folder_number}/{file_name}")
+# def get_png(folder_number: str, file_name: str):
+#     """
+#     Retrieves a PNG image from Snowflake, converts it to Base64, and sends it to the frontend.
+#     """
+#     # Validate inputs
+#     if not folder_number.isdigit() or not (0 <= int(folder_number) <= 275):
+#         raise HTTPException(status_code=400, detail="Invalid folder number. Must be between '000' and '275'.")
+#     if not file_name.endswith(".png"):
+#         raise HTTPException(status_code=400, detail="Invalid file format. Must be a PNG file.")
+#
+#     folder_number = folder_number.zfill(3)
+#     file_path = f'@MCAD.MCAD_DATA.INTERNAL_STAGE_FOR_ORIGINAL_DATA/{folder_number}/{file_name}'
+#
+#     conn = get_snowflake_connection()
+#     if conn:
+#         try:
+#             cur = conn.cursor()
+#             query = f"SELECT TO_BASE64(DATA) FROM {file_path}"
+#             cur.execute(query)
+#             result = cur.fetchone()
+#
+#             if result:
+#                 image_base64 = result[0]
+#                 return JSONResponse(content={"image_base64": image_base64})
+#             else:
+#                 raise HTTPException(status_code=404, detail="Image not found.")
+#         except Exception as e:
+#             raise HTTPException(status_code=500, detail=f"Database error: {e}")
+#         finally:
+#             conn.close()
+#     raise HTTPException(status_code=500, detail="Database connection failed")
+
+#############################################
+####### 2nd get_png script (w/ base64) ######
+#############################################
+# @app.get("/get_png/{folder_number}/{file_name}")
+# def get_png(folder_number: str, file_name: str):
+#     if not folder_number.isdigit() or not (0 <= int(folder_number) <= 275):
+#         raise HTTPException(status_code=400, detail="Invalid folder number. Must be between '000' and '275'.")
+#     if not file_name.endswith(".png"):
+#         raise HTTPException(status_code=400, detail="Invalid file format. Must be a PNG file.")
+#
+#     folder_number = folder_number.zfill(3)
+#     file_path = f'@MCAD.MCAD_DATA.INTERNAL_STAGE_FOR_ORIGINAL_DATA/{folder_number}/{file_name}'
+#
+#     conn = get_snowflake_connection()
+#     if conn:
+#         try:
+#             cur = conn.cursor()
+#             query = f"SELECT DATA FROM {file_path}"
+#             cur.execute(query)
+#             result = cur.fetchone()
+#
+#             if result:
+#                 image_bytes = result[0]  # Assuming this returns binary data
+#                 image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+#                 return JSONResponse(content={"image_base64": image_base64})
+#             else:
+#                 raise HTTPException(status_code=404, detail="Image not found.")
+#         except Exception as e:
+#             raise HTTPException(status_code=500, detail=f"Database error: {e}")
+#         finally:
+#             conn.close()
+#     raise HTTPException(status_code=500, detail="Database connection failed")
+
+################################################
+####### 3rd get_png script (w/ streaming) ######
+################################################
+# from fastapi.responses import StreamingResponse
+# from io import BytesIO
+#
+# @app.get("/get_png/{folder_number}/{file_name}")
+# def get_png(folder_number: str, file_name: str):
+#     if not folder_number.isdigit() or not (0 <= int(folder_number) <= 275):
+#         raise HTTPException(status_code=400, detail="Invalid folder number. Must be between '000' and '275'.")
+#     if not file_name.endswith(".png"):
+#         raise HTTPException(status_code=400, detail="Invalid file format. Must be a PNG file.")
+#
+#     folder_number = folder_number.zfill(3)
+#     file_path = f'@MCAD.MCAD_DATA.INTERNAL_STAGE_FOR_ORIGINAL_DATA/{folder_number}/{file_name}'
+#
+#     conn = get_snowflake_connection()
+#     if conn:
+#         try:
+#             cur = conn.cursor()
+#             query = f"SELECT DATA FROM {file_path}"
+#             cur.execute(query)
+#             result = cur.fetchone()
+#
+#             if result:
+#                 image_bytes = result[0]
+#                 return StreamingResponse(BytesIO(image_bytes), media_type="image/png")
+#             else:
+#                 raise HTTPException(status_code=404, detail="Image not found.")
+#         except Exception as e:
+#             raise HTTPException(status_code=500, detail=f"Database error: {e}")
+#         finally:
+#             conn.close()
+#     raise HTTPException(status_code=500, detail="Database connection failed")
+
+#############################
+######## 4th Version ########
+#############################
+@app.get("/get_png/{folder_number}/{file_name}")
+def get_png(folder_number: str, file_name: str):
+    """Fetch PNG image from Snowflake and return it as a base64 string."""
+    conn = get_snowflake_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+
+            # Query to retrieve the PNG file as BLOB
+            query = f"""
+            SELECT GET_BINARY(PNG_IMAGE) 
+            FROM MCAD.MCAD_DATA.MOON_CRATER_IMAGES
+            WHERE FILE_PATH = 'Folder {folder_number}/{file_name}'
+            """
+            cur.execute(query)
+            image_blob = cur.fetchone()
+
+            if image_blob and image_blob[0]:
+                image_base64 = base64.b64encode(image_blob[0]).decode("utf-8")
+                cur.close()
+                return {"image_base64": image_base64}
+            else:
+                raise HTTPException(status_code=404, detail="Image not found")
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
 
