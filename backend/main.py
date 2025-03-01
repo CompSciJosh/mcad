@@ -23,6 +23,7 @@
 #############################################
 ### Step 8: Implement User Authentication ###
 #############################################
+import json
 import re
 import nltk
 import jwt
@@ -33,7 +34,7 @@ import base64
 from nltk.corpus import words
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-#from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from datetime import datetime, timedelta, UTC  # Ensure UTC is imported
 from dotenv import load_dotenv
@@ -424,6 +425,69 @@ def list_png_files(folder_number: str):
 #############################
 ######## 4th Version ########
 #############################
+# @app.get("/get_png/{folder_number}/{file_name}")
+# def get_png(folder_number: str, file_name: str):
+#     """Fetch PNG image from Snowflake and return it as a base64 string."""
+#     conn = get_snowflake_connection()
+#     if conn:
+#         try:
+#             cur = conn.cursor()
+#
+#             # Query to retrieve the PNG file as BLOB
+#             query = f"""
+#             SELECT GET_BINARY(PNG_IMAGE)
+#             FROM MCAD.MCAD_DATA.MOON_CRATER_IMAGES
+#             WHERE FILE_PATH = 'Folder {folder_number}/{file_name}'
+#             """
+#             cur.execute(query)
+#             image_blob = cur.fetchone()
+#
+#             if image_blob and image_blob[0]:
+#                 image_base64 = base64.b64encode(image_blob[0]).decode("utf-8")
+#                 cur.close()
+#                 return {"image_base64": image_base64}
+#             else:
+#                 raise HTTPException(status_code=404, detail="Image not found")
+#
+#         except Exception as e:
+#             raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+# Add this endpoint below your other endpoints
+@app.get("/get_json/{folder_number}/{file_name}")
+def get_json(folder_number: str, file_name: str):
+    """Fetch JSON data from Snowflake and return it."""
+    conn = get_snowflake_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+
+            # Convert filename to match PNG format
+            png_file_name = file_name.replace(".json", ".png")
+
+            # Query to retrieve the JSON data from the MCAD_CRATER_DATA table
+            query = f"""
+            SELECT * 
+            FROM MCAD.MCAD_DATA.MOON_CRATER_DATA
+            WHERE "PNG File" = 'Folder {folder_number}/{png_file_name}'
+            """
+            cur.execute(query)
+            column_names = [col[0] for col in cur.description]
+            row = cur.fetchone()
+
+            if row:
+                # Create a dictionary with column names as keys and row values as values
+                json_data = {column_names[i]: row[i] for i in range(len(column_names))}
+                cur.close()
+                return {"json_data": json_data}
+            else:
+                raise HTTPException(status_code=404, detail="JSON data not found")
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    else:
+        raise HTTPException(status_code=500, detail="Database connection failed")
+
+
+# You might need to modify your get_png endpoint to ensure it properly identifies the file paths
 @app.get("/get_png/{folder_number}/{file_name}")
 def get_png(folder_number: str, file_name: str):
     """Fetch PNG image from Snowflake and return it as a base64 string."""
@@ -434,9 +498,9 @@ def get_png(folder_number: str, file_name: str):
 
             # Query to retrieve the PNG file as BLOB
             query = f"""
-            SELECT GET_BINARY(PNG_IMAGE) 
+            SELECT "Image_Data" 
             FROM MCAD.MCAD_DATA.MOON_CRATER_IMAGES
-            WHERE FILE_PATH = 'Folder {folder_number}/{file_name}'
+            WHERE "PNG File" = 'Folder {folder_number}/{file_name}'
             """
             cur.execute(query)
             image_blob = cur.fetchone()
@@ -450,6 +514,7 @@ def get_png(folder_number: str, file_name: str):
 
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
+    else:
+        raise HTTPException(status_code=500, detail="Database connection failed")
 
 
