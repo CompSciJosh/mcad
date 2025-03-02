@@ -4,7 +4,7 @@ import requests
 import base64
 from PyQt6.QtWidgets import (QApplication, QWidget, QLabel, QPushButton, QVBoxLayout,
                              QComboBox, QHBoxLayout, QLineEdit, QMessageBox,
-                             QTextEdit, QTabWidget, QScrollArea)
+                             QTextEdit, QTabWidget, QScrollArea, QSplitter, QSizePolicy)
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import Qt
 
@@ -14,11 +14,18 @@ API_URL = "http://127.0.0.1:8000/compute_crater_size/"  # FastAPI endpoint
 class MCAD_GUI(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("MCAD Lunar Crater Analysis Tool")
-        self.setGeometry(100, 100, 800, 800)  # Increased size to accommodate new elements
+        self.setWindowTitle("MCAD (Lunar Crater Analysis Tool)")
+        self.setGeometry(100, 100, 1000, 800)  # Increased width for the new layout
+
+        # Main horizontal layout to split left and right sides
+        main_layout = QHBoxLayout(self)
+
+        # Left side layout (logo, image, and results)
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
 
         # NASA Logo
-        self.nasa_logo = QLabel(self)
+        self.nasa_logo = QLabel()
         try:
             pixmap = QPixmap("nasa_logo.png")
             self.nasa_logo.setPixmap(pixmap)
@@ -29,35 +36,69 @@ class MCAD_GUI(QWidget):
             self.nasa_logo.setText("NASA")
             self.nasa_logo.setStyleSheet("font-weight: bold; font-size: 24px;")
 
-        # Create tab widget for better organization
+        left_layout.addWidget(self.nasa_logo)
+
+        # Image display label - no fixed size to allow proper scaling
+        self.image_label = QLabel()
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.image_label.setStyleSheet("border: 1px solid #cccccc;")
+        self.image_label.setText("No image loaded")
+
+        # Set size policy for the image label
+        self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        # Create a scroll area for the image
+        self.image_scroll_area = QScrollArea()
+        self.image_scroll_area.setWidget(self.image_label)
+        self.image_scroll_area.setWidgetResizable(True)
+
+        left_layout.addWidget(self.image_scroll_area)
+
+        # Results section - now on the left under the image
+        self.result_label = QLabel("Results will be displayed here")
+        self.result_label.setWordWrap(True)
+        self.result_label.setStyleSheet("background-color: #2E3192; padding: 10px; border-radius: 5px;")
+
+        left_layout.addWidget(QLabel("Analysis Results:"))
+        left_layout.addWidget(self.result_label)
+
+        # Right side with tabs
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+
+        # Create tab widget for the right side
         self.tab_widget = QTabWidget()
 
         # Create tabs
-        self.image_tab = QWidget()
+        self.image_controls_tab = QWidget()
         self.data_tab = QWidget()
         self.analysis_tab = QWidget()
 
-        self.setup_image_tab()
+        self.setup_image_controls_tab()
         self.setup_data_tab()
         self.setup_analysis_tab()
 
         # Add tabs to widget
-        self.tab_widget.addTab(self.image_tab, "Image View")
+        self.tab_widget.addTab(self.image_controls_tab, "Image View")
         self.tab_widget.addTab(self.data_tab, "JSON Data")
         self.tab_widget.addTab(self.analysis_tab, "Crater Analysis")
 
-        # Main layout
-        main_layout = QVBoxLayout()
-        main_layout.addWidget(self.nasa_logo)
-        main_layout.addWidget(self.tab_widget)
+        right_layout.addWidget(self.tab_widget)
 
-        self.setLayout(main_layout)
+        # Add the left and right panels to the main layout
+        # Use a splitter to allow resizing
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(left_panel)
+        splitter.addWidget(right_panel)
+        splitter.setSizes([400, 600])  # Initial size distribution
+
+        main_layout.addWidget(splitter)
 
         # Initialize current JSON data
         self.current_json_data = None
         self.current_image_data = None
 
-    def setup_image_tab(self):
+    def setup_image_controls_tab(self):
         # Dropdown for selecting folder
         self.folder_combo = QComboBox()
         self.folder_combo.addItems([str(i).zfill(3) for i in range(276)])
@@ -73,18 +114,6 @@ class MCAD_GUI(QWidget):
         self.load_img_btn = QPushButton("Load Image & Data")
         self.load_img_btn.clicked.connect(self.load_image_and_data)
 
-        # Image display label
-        self.image_label = QLabel()
-        self.image_label.setFixedSize(300, 300)
-        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image_label.setStyleSheet("border: 1px solid #cccccc;")
-        self.image_label.setText("No image loaded")
-
-        # Create a scroll area for the image
-        scroll_area = QScrollArea()
-        scroll_area.setWidget(self.image_label)
-        scroll_area.setWidgetResizable(True)
-
         # Layout
         folder_hbox = QHBoxLayout()
         folder_hbox.addWidget(QLabel("Select Folder:"))
@@ -99,15 +128,15 @@ class MCAD_GUI(QWidget):
         vbox = QVBoxLayout()
         vbox.addLayout(folder_hbox)
         vbox.addLayout(png_hbox)
-        vbox.addWidget(scroll_area)
+        vbox.addStretch()
 
-        self.image_tab.setLayout(vbox)
+        self.image_controls_tab.setLayout(vbox)
 
     def setup_data_tab(self):
         # JSON data display
         self.json_display = QTextEdit()
         self.json_display.setReadOnly(True)
-        self.json_display.setStyleSheet("font-family: monospace;")
+        self.json_display.setStyleSheet("font-family: Chalkboard;")
 
         # Layout
         vbox = QVBoxLayout()
@@ -134,10 +163,6 @@ class MCAD_GUI(QWidget):
         self.compute_button = QPushButton("Compute Crater Size")
         self.compute_button.clicked.connect(self.compute_crater_size)
 
-        # Result Label
-        self.result_label = QLabel("Results will be displayed here")
-        self.result_label.setWordWrap(True)
-
         # Layout
         vbox = QVBoxLayout()
         vbox.addWidget(self.cam_pos_label)
@@ -150,8 +175,7 @@ class MCAD_GUI(QWidget):
         vbox.addWidget(self.pixel_diameter_label)
         vbox.addWidget(self.pixel_diameter_input)
         vbox.addWidget(self.compute_button)
-        vbox.addWidget(QLabel("Analysis Results:"))
-        vbox.addWidget(self.result_label)
+        vbox.addStretch()
 
         self.analysis_tab.setLayout(vbox)
 
@@ -231,12 +255,10 @@ class MCAD_GUI(QWidget):
                         else:
                             raise ValueError("Could not parse image data")
 
-                # Scale pixmap to fit the label while maintaining aspect ratio
-                self.image_label.setPixmap(pixmap.scaled(
-                    self.image_label.width(),
-                    self.image_label.height(),
-                    Qt.AspectRatioMode.KeepAspectRatio
-                ))
+                # Set the exact size of the image to eliminate whitespace
+                self.image_label.setPixmap(pixmap)
+                # Adjust the label size to match the pixmap size
+                self.image_label.setFixedSize(pixmap.size())
             else:
                 self.image_label.setText(f"Error: {response.status_code}")
                 QMessageBox.critical(self, "Error", f"Server returned status code: {response.status_code}")

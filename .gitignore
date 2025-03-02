@@ -15,3 +15,6 @@ notes.txt
 __pycache__/
 .DS_Store
 .idea/
+
+# Ignore personal notes
+mcad.db
