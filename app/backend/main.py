@@ -17,7 +17,7 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # # # # # # # # # # # # # # # # # # # # # # # # # # # #
  installed dependencies using PyCharm terminal:
- pip install fastapi uvicorn bcrypt pyjwt python-dotenv snowflake-connector-python
+ pip install fastapi uvicorn bcrypt pyjwt python-dotenv sqlalchemy
  In PyCharm terminal press: Ctrl + C to stop the server
 """
 #############################################
@@ -31,19 +31,70 @@ import bcrypt
 import os
 import numpy as np
 import base64
+from pathlib import Path
 from nltk.corpus import words
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
-from datetime import datetime, timedelta, UTC  # Ensure UTC is imported
+from datetime import datetime, timedelta, UTC
 from dotenv import load_dotenv
-from database import get_snowflake_connection
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, Float, ForeignKey, Text, LargeBinary
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
 from utils.crater_calculations import compute_camera_altitude, compute_image_dimensions, crater_diameter_meters
-from typing import List
+from typing import List, Optional
 
 # Load environment variables
 load_dotenv()
+
+# Database configuration
+DATABASE_URL = "sqlite:////Users/joshuajackson/PycharmProjects/mcad/data/database/mcad.db"
+DATA_DIR = "/Users/joshuajackson/PycharmProjects/mcad/data/original/mcad_moon_data"
+
+# Create engine
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# Define database models
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    email = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
+    is_active = Column(Boolean, default=True)
+
+class MoonCraterData(Base):
+    __tablename__ = "moon_crater_data"
+
+    id = Column(Integer, primary_key=True, index=True)
+    folder_number = Column(String, index=True)
+    file_name = Column(String, index=True)
+    png_file = Column(String, unique=True)
+    data = Column(Text)  # JSON data as text
+
+class MoonCraterImage(Base):
+    __tablename__ = "moon_crater_images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    folder_number = Column(String, index=True)
+    file_name = Column(String, index=True)
+    png_file = Column(String, unique=True)
+    image_data = Column(LargeBinary)
+
+# Create tables
+Base.metadata.create_all(bind=engine)
+
+# Dependency to get the database session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
@@ -68,7 +119,6 @@ class UserResponse(BaseModel):
     username: str
     email: str
     is_active: bool
-
 
 # Function to validate password complexity
 def validate_password(password: str) -> bool:
@@ -99,38 +149,6 @@ def validate_password(password: str) -> bool:
     print("Password is valid!")  # Debugging
     return True
 
-####################################
-#### Debugging Password Example ####
-##################################
-# def validate_password(password: str) -> bool:
-#     """Validates password strength."""
-#     print(f"Validating password: {password}")  # Debugging
-#
-#     if len(password) < 16 or len(password) > 64:
-#         print("Failed: Length check")
-#         return False
-#     if not any(c.islower() for c in password):
-#         print("Failed: No lowercase letter")
-#         return False
-#     if not any(c.isupper() for c in password):
-#         print("Failed: No uppercase letter")
-#         return False
-#     if not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
-#         print("Failed: No special character")
-#         return False
-#
-#     # Tokenize password into whole words and check against dictionary
-#     password_words = re.findall(r'\b[a-zA-Z]+\b', password)  # Extract whole words only
-#     print(f"Extracted words: {password_words}")  # Debugging
-#
-#     if any(word.lower() in english_words for word in password_words):
-#         print(f"Failed: Contains dictionary words -> {password_words}")
-#         return False
-#
-#     print("Password is valid!")  # Debugging
-#     return True
-###################################################
-
 # Function to hash passwords
 def hash_password(password: str) -> str:
     """Hashes the password if it meets complexity requirements."""
@@ -153,66 +171,53 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 @app.post("/register", response_model=UserResponse)
-def register_user(user: UserCreate):
+def register_user(user: UserCreate, db: Session = Depends(get_db)):
     """Register a new user in the database."""
-    conn = get_snowflake_connection()
-    if conn:
-        try:
-            cur = conn.cursor()
+    try:
+        # Convert username to lowercase
+        username_lower = user.username.lower()
 
-            # Convert username to lowercase
-            username_lower = user.username.lower()
+        # Check if username or email already exists (case-insensitive check)
+        if db.query(User).filter((User.username.ilike(username_lower)) | (User.email == user.email)).first():
+            raise HTTPException(status_code=400, detail="Username or email already registered")
 
-            # Check if username or email already exists (case-insensitive check)
-            cur.execute("SELECT id FROM users WHERE LOWER(username)=%s OR email=%sc", (username_lower, user.email))
-            if cur.fetchone():
-                raise HTTPException(status_code=400, detail="Username or email already registered")
+        # Validate and hash the password
+        hashed_password = hash_password(user.password)
 
-            # Validate and hash the password
-            hashed_password = hash_password(user.password)
+        # Create new user with lowercase username
+        new_user = User(
+            username=username_lower,
+            email=user.email,
+            hashed_password=hashed_password
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
 
-            # Insert new user with lowercase username
-            cur.execute(
-                "INSERT INTO users (username, email, hashed_password) VALUES (%s, %s, %s)",
-                (username_lower, user.email, hashed_password),
-            )
-            conn.commit()
-            cur.close()
-
-            # Retrieve the newly created user
-            cur = conn.cursor()
-            cur.execute("SELECT id, username, email, is_active FROM users WHERE LOWER(username)=%s", (username_lower,))
-            new_user = cur.fetchone()
-
-            return UserResponse(id=new_user[0], username=new_user[1], email=new_user[2], is_active=new_user[3])
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Database error: {e}")
-        finally:
-            conn.close()
-    raise HTTPException(status_code=500, detail="Database connection failed")
+        return UserResponse(
+            id=new_user.id,
+            username=new_user.username,
+            email=new_user.email,
+            is_active=new_user.is_active
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 @app.post("/token")
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """Authenticate user and return JWT token."""
-    conn = get_snowflake_connection()
-    if conn:
-        try:
-            cur = conn.cursor()
+    try:
+        # Convert username to lowercase when querying (case-insensitive login)
+        user = db.query(User).filter(User.username.ilike(form_data.username.lower())).first()
 
-            # Convert username to lowercase when querying (case-insensitive login)
-            cur.execute("SELECT id, username, hashed_password FROM users WHERE LOWER(username)=%s", (form_data.username.lower(),))
-            user = cur.fetchone()
-            if not user or not verify_password(form_data.password, user[2]):
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        if not user or not verify_password(form_data.password, user.hashed_password):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-            # Generate JWT token
-            access_token = create_access_token(data={"sub": user[1]})
-            return {"access_token": access_token, "token_type": "bearer"}
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Database error: {e}")
-        finally:
-            conn.close()
-    raise HTTPException(status_code=500, detail="Database connection failed")
+        # Generate JWT token
+        access_token = create_access_token(data={"sub": user.username})
+        return {"access_token": access_token, "token_type": "bearer"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {e}")
 
 ####################################################################################
 ############ Calculate Camera Distance From Moon ###################################
@@ -256,95 +261,133 @@ async def compute_crater_size(request: CraterRequest):
         "crater_diameter_m": crater_size_m
     }
 
+@app.get("/list_folders")
+def list_folders():
+    """List all available folders in the data directory."""
+    try:
+        folder_path = Path(DATA_DIR)
+        folders = [f.name for f in folder_path.iterdir() if f.is_dir() and f.name.startswith("Folder")]
+        return {"folders": folders}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading folders: {str(e)}")
 
 @app.get("/list_png_files/{folder_number}")
 def list_png_files(folder_number: str):
-    """Fetch PNG filenames from Snowflake based on the folder number."""
-    conn = get_snowflake_connection()
-    if conn:
-        try:
-            cur = conn.cursor()
-
-            # Query staged files for the selected folder
-            query = f"""
-            SELECT METADATA$FILENAME 
-            FROM @MCAD.MCAD_DATA.INTERNAL_STAGE_FOR_ORIGINAL_DATA
-            WHERE METADATA$FILENAME LIKE 'Folder {folder_number}/%.png'
-            """
-            cur.execute(query)
-
-            # Extract filenames
-            png_files = [row[0].split("/")[-1] for row in cur.fetchall()]
-            cur.close()
-            return {"png_files": png_files}
-
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-
+    """List all PNG files in the specified folder."""
+    try:
+        folder_path = Path(DATA_DIR) / folder_number
+        png_files = [f.name for f in folder_path.iterdir() if f.is_file() and f.suffix.lower() == '.png']
+        return {"png_files": png_files}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading files: {str(e)}")
 
 @app.get("/get_json/{folder_number}/{file_name}")
 def get_json(folder_number: str, file_name: str):
-    """Fetch JSON data from Snowflake and return it."""
-    conn = get_snowflake_connection()
-    if conn:
-        try:
-            cur = conn.cursor()
+    """Fetch JSON data from the local filesystem."""
+    try:
+        # Construct the path to the JSON file (replacing .png with .json if needed)
+        json_file_name = file_name.replace(".png", ".json")
+        json_path = Path(DATA_DIR) / folder_number / json_file_name
 
-            # Convert filename to match PNG format
-            png_file_name = file_name.replace(".json", ".png")
+        # Check if JSON file exists
+        if not json_path.exists():
+            raise HTTPException(status_code=404, detail="JSON file not found")
 
-            # Query to retrieve the JSON data from the MCAD_CRATER_DATA table
-            query = f"""
-            SELECT * 
-            FROM MCAD.MCAD_DATA.MOON_CRATER_DATA
-            WHERE "PNG File" = '{folder_number}/{png_file_name}'
-            """
-            cur.execute(query)
-            column_names = [col[0] for col in cur.description]
-            row = cur.fetchone()
+        # Read and parse the JSON file
+        with open(json_path, 'r') as f:
+            json_data = json.load(f)
 
-            if row:
-                # Create a dictionary with column names as keys and row values as values
-                json_data = {column_names[i]: row[i] for i in range(len(column_names))}
-                cur.close()
-                return {"json_data": json_data}
-            else:
-                raise HTTPException(status_code=404, detail="JSON data not found")
+        return {"json_data": json_data}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Error decoding JSON file")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-    else:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-
-
-# You might need to modify your get_png endpoint to ensure it properly identifies the file paths
 @app.get("/get_png/{folder_number}/{file_name}")
 def get_png(folder_number: str, file_name: str):
-    """Fetch PNG image from Snowflake and return it as a base64 string."""
-    conn = get_snowflake_connection()
-    if conn:
-        try:
-            cur = conn.cursor()
+    """Fetch and return PNG image file directly."""
+    try:
+        png_path = Path(DATA_DIR) / folder_number / file_name
 
-            # Query to retrieve the PNG file as BLOB
-            query = f"""
-            SELECT "Image_Data" 
-            FROM MCAD.MCAD_DATA.MOON_CRATER_IMAGES
-            WHERE "PNG File" = '{folder_number}/{file_name}'
-            """
-            cur.execute(query)
-            image_blob = cur.fetchone()
+        # Check if the file exists
+        if not png_path.exists():
+            raise HTTPException(status_code=404, detail="Image not found")
 
-            if image_blob and image_blob[0]:
-                image_base64 = base64.b64encode(image_blob[0]).decode("utf-8")
-                cur.close()
-                return {"image_base64": image_base64}
-            else:
-                raise HTTPException(status_code=404, detail="Image not found")
+        # Return the image file directly
+        return FileResponse(png_path, media_type="image/png")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-    else:
-        raise HTTPException(status_code=500, detail="Database connection failed")
+@app.get("/get_image_base64/{folder_number}/{file_name}")
+def get_image_base64(folder_number: str, file_name: str):
+    """Fetch PNG image and return it as a base64 string."""
+    try:
+        png_path = Path(DATA_DIR) / folder_number / file_name
 
+        # Check if the file exists
+        if not png_path.exists():
+            raise HTTPException(status_code=404, detail="Image not found")
 
+        # Read the file and convert to base64
+        with open(png_path, 'rb') as f:
+            image_data = f.read()
+            image_base64 = base64.b64encode(image_data).decode("utf-8")
+
+        return {"image_base64": image_base64}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+# Utility endpoint to initialize the database with local data
+@app.post("/init_database")
+def init_database(db: Session = Depends(get_db)):
+    """Initialize the database with data from local files."""
+    try:
+        data_dir = Path(DATA_DIR)
+        folders = [f for f in data_dir.iterdir() if f.is_dir() and f.name.startswith("Folder")]
+
+        processed_files = 0
+
+        for folder in folders:
+            folder_number = folder.name.split(" ")[1]
+            png_files = [f for f in folder.iterdir() if f.is_file() and f.suffix.lower() == '.png']
+
+            for png_file in png_files:
+                file_name = png_file.name
+                png_file_path = str(folder.name) + "/" + file_name
+
+                # Check for corresponding JSON file
+                json_file = png_file.with_suffix('.json')
+
+                if json_file.exists():
+                    # Read JSON data
+                    with open(json_file, 'r') as f:
+                        json_data = json.load(f)
+
+                    # Read image data
+                    with open(png_file, 'rb') as f:
+                        image_data = f.read()
+
+                    # Store in database
+                    db_json = MoonCraterData(
+                        folder_number=folder_number,
+                        file_name=file_name,
+                        png_file=png_file_path,
+                        data=json.dumps(json_data)
+                    )
+
+                    db_image = MoonCraterImage(
+                        folder_number=folder_number,
+                        file_name=file_name,
+                        png_file=png_file_path,
+                        image_data=image_data
+                    )
+
+                    db.add(db_json)
+                    db.add(db_image)
+                    processed_files += 1
+
+        db.commit()
+        return {"message": f"Database initialized with {processed_files} files"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database initialization error: {str(e)}")
