@@ -24,46 +24,64 @@ class MCAD_GUI(QWidget):
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
 
-        # NASA Logo
+        # NASA Logo Container with fixed width and left alignment
+        logo_container = QWidget()
+        logo_layout = QHBoxLayout(logo_container)
+        logo_layout.setContentsMargins(0, 0, 0, 0)  # Remove padding
+
+        # NASA Logo with fixed size
         self.nasa_logo = QLabel()
         try:
             pixmap = QPixmap("nasa_logo.png")
-            self.nasa_logo.setPixmap(pixmap)
-            self.nasa_logo.setFixedSize(pixmap.width(), pixmap.height())
+            scaled_pixmap = pixmap.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio,
+                                          Qt.TransformationMode.SmoothTransformation)
+            self.nasa_logo.setPixmap(scaled_pixmap)
+            self.nasa_logo.setFixedSize(150, 150)
+            self.nasa_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         except Exception as e:
             print(f"Error loading NASA logo: {e}")
             # Create a placeholder if logo can't be loaded
             self.nasa_logo.setText("NASA")
             self.nasa_logo.setStyleSheet("font-weight: bold; font-size: 24px;")
+            self.nasa_logo.setFixedSize(150, 150)
+            self.nasa_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        left_layout.addWidget(self.nasa_logo)
+        logo_layout.addWidget(self.nasa_logo)
+        logo_layout.addStretch()  # Push logo to the left
+        left_layout.addWidget(logo_container)
 
-        # Image display label - no fixed size to allow proper scaling
+        # Image container with flexible size policy
+        self.image_container = QWidget()
+        self.image_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        image_container_layout = QVBoxLayout(self.image_container)
+
+        # Image display label
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label.setStyleSheet("border: 1px solid #cccccc;")
         self.image_label.setText("No image loaded")
-
-        # Set size policy for the image label
         self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        # Create a scroll area for the image
-        self.image_scroll_area = QScrollArea()
-        self.image_scroll_area.setWidget(self.image_label)
-        self.image_scroll_area.setWidgetResizable(True)
-
-        left_layout.addWidget(self.image_scroll_area)
+        image_container_layout.addWidget(self.image_label)
+        left_layout.addWidget(self.image_container, 1)  # Give it more stretch factor
 
         # Results section - now on the left under the image
+        results_container = QWidget()
+        results_layout = QVBoxLayout(results_container)
+
+        results_title = QLabel("Analysis Results:")
         self.result_label = QLabel("Results will be displayed here")
         self.result_label.setWordWrap(True)
-        self.result_label.setStyleSheet("background-color: #2E3192; padding: 10px; border-radius: 5px;")
+        self.result_label.setStyleSheet("background-color: #2E3192; color: white; padding: 10px; border-radius: 5px;")
 
-        left_layout.addWidget(QLabel("Analysis Results:"))
-        left_layout.addWidget(self.result_label)
+        results_layout.addWidget(results_title)
+        results_layout.addWidget(self.result_label)
 
-        # Right side with tabs
+        left_layout.addWidget(results_container)
+
+        # Right side with tabs - make it narrower
         right_panel = QWidget()
+        right_panel.setMaximumWidth(400)  # Limit the width of the right panel
         right_layout = QVBoxLayout(right_panel)
 
         # Create tab widget for the right side
@@ -90,7 +108,7 @@ class MCAD_GUI(QWidget):
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.addWidget(left_panel)
         splitter.addWidget(right_panel)
-        splitter.setSizes([400, 600])  # Initial size distribution
+        splitter.setSizes([700, 300])  # Give more space to the left panel initially
 
         main_layout.addWidget(splitter)
 
@@ -255,10 +273,26 @@ class MCAD_GUI(QWidget):
                         else:
                             raise ValueError("Could not parse image data")
 
-                # Set the exact size of the image to eliminate whitespace
-                self.image_label.setPixmap(pixmap)
-                # Adjust the label size to match the pixmap size
-                self.image_label.setFixedSize(pixmap.size())
+                # Calculate the available space in the image container
+                container_width = self.image_container.width()
+                container_height = self.image_container.height()
+
+                # Scale the image to fit the container while maintaining aspect ratio
+                scaled_pixmap = pixmap.scaled(
+                    container_width,
+                    container_height,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation
+                )
+
+                # Set the pixmap and let it adjust dynamically when window is resized
+                self.image_label.setPixmap(scaled_pixmap)
+
+                # Store original pixmap for rescaling on resize
+                self.original_pixmap = pixmap
+
+                # Connect resize event if not already connected
+                self.image_container.resizeEvent = self.image_container_resized
             else:
                 self.image_label.setText(f"Error: {response.status_code}")
                 QMessageBox.critical(self, "Error", f"Server returned status code: {response.status_code}")
@@ -272,6 +306,27 @@ class MCAD_GUI(QWidget):
         except Exception as e:
             self.image_label.setText("Error loading image")
             QMessageBox.critical(self, "Error", f"Error fetching image: {str(e)}")
+
+    def image_container_resized(self, event):
+        """Handle resizing of the image container to scale the image properly"""
+        if hasattr(self, 'original_pixmap') and not self.original_pixmap.isNull():
+            # Get the container's new size
+            container_width = self.image_container.width()
+            container_height = self.image_container.height()
+
+            # Scale the image to fit the container
+            scaled_pixmap = self.original_pixmap.scaled(
+                container_width - 20,  # Allow for margins
+                container_height - 20,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+
+            # Update the image label
+            self.image_label.setPixmap(scaled_pixmap)
+
+        # Make sure to call the parent class's resizeEvent
+        super(QWidget, self.image_container).resizeEvent(event)
 
     def load_json_data(self, folder_number, file_name):
         # Convert PNG filename to JSON filename
