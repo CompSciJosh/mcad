@@ -58,7 +58,7 @@ class MCAD_GUI(QWidget):
         # Image display label
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image_label.setStyleSheet("border: 1px solid #cccccc;")
+        self.image_label.setStyleSheet("font-family: Chalkboard; background-color: #2E3192; font-size: 16px; border: 5px solid #2E3192;")
         self.image_label.setText("No image loaded")
         self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
@@ -72,7 +72,7 @@ class MCAD_GUI(QWidget):
         results_title = QLabel("Analysis Results:")
         self.result_label = QLabel("Results will be displayed here")
         self.result_label.setWordWrap(True)
-        self.result_label.setStyleSheet("background-color: #2E3192; color: white; padding: 10px; border-radius: 5px;")
+        self.result_label.setStyleSheet("font-family: Chalkboard; font-size: 16px; background-color: #2E3192; color: white; padding: 10px; border-radius: 5px;")
 
         results_layout.addWidget(results_title)
         results_layout.addWidget(self.result_label)
@@ -154,7 +154,7 @@ class MCAD_GUI(QWidget):
         # JSON data display
         self.json_display = QTextEdit()
         self.json_display.setReadOnly(True)
-        self.json_display.setStyleSheet("font-family: Chalkboard;")
+        self.json_display.setStyleSheet("font-family: Chalkboard; font-size: 16px")
 
         # Layout
         vbox = QVBoxLayout()
