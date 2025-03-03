@@ -20,9 +20,9 @@
  pip install fastapi uvicorn bcrypt pyjwt python-dotenv sqlalchemy
  In PyCharm terminal press: Ctrl + C to stop the server
 """
-#############################################
-### Step 8: Implement User Authentication ###
-#############################################
+#####################################
+### Implement User Authentication ###
+#####################################
 import json
 import re
 import nltk
