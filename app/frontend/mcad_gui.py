@@ -58,7 +58,7 @@ class MCAD_GUI(QWidget):
         # Image display label
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image_label.setStyleSheet("font-family: Chalkboard; background-color: #2E3192; font-size: 16px; border: 5px solid #2E3192;")
+        self.image_label.setStyleSheet("font-family: Chalkboard; background-color: #2E3192; font-size: 20px; border: 5px solid #2E3192;")
         self.image_label.setText("No image loaded")
         self.image_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
