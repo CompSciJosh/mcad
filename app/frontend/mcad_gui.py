@@ -129,7 +129,7 @@ class MCAD_GUI(QWidget):
         self.load_png_btn.clicked.connect(self.load_png_files)
 
         # Load Image button
-        self.load_img_btn = QPushButton("Load Image & Data")
+        self.load_img_btn = QPushButton("Load Image/Data")
         self.load_img_btn.clicked.connect(self.load_image_and_data)
 
         # Layout
