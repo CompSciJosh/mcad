@@ -17,4 +17,5 @@ __pycache__/
 .idea/
 
 # Ignore mcad database
-# data/database/mcad.db
+data/database/mcad.db
+data
